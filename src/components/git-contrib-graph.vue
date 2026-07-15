@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
     ref, computed,
-    onMounted
+    // onMounted
 } from 'vue'
 
 interface ContributionDay {
@@ -19,14 +19,14 @@ interface ContributionDetail {
     source: 'github' | 'gitlab'
 }
 
-interface GitHubContribution {
-    date: string
-    contributionCount: number
-}
+// interface GitHubContribution {
+//     date: string
+//     contributionCount: number
+// }
 
-interface GitLabCommit {
-    committed_date: string
-}
+// interface GitLabCommit {
+//     committed_date: string
+// }
 
 const githubToken = ref(import.meta.env.VITE_GITHUB_TOKEN ?? '')
 const gitlabToken = ref(import.meta.env.VITE_GITLAB_TOKEN ?? '')
@@ -52,6 +52,8 @@ const availableYears = computed(() => {
 
     return years
 })
+
+/* ------------------------------ Month labels ------------------------------ */
 
 const weeks = computed(() => {
     const grouped: ContributionDay[][] = []
@@ -88,6 +90,8 @@ const getLevelColor = (level: number): string => {
     return colors[Math.min(level, 4)] ?? '#161b22' // '#ebedf0'
 }
 
+/* ---------------------------------- Query --------------------------------- */
+
 const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetail[]>> => {
     const query = `
     query {
@@ -96,6 +100,7 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
           commitContributionsByRepository {
             repository {
               name
+              isPrivate
               owner {
                 login
               }
@@ -111,6 +116,7 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
           pullRequestContributionsByRepository {
             repository {
               name
+              isPrivate
               owner {
                 login
               }
@@ -128,6 +134,7 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
           issueContributionsByRepository {
             repository {
               name
+              isPrivate
               owner {
                 login
               }
@@ -145,6 +152,7 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
           pullRequestReviewContributionsByRepository {
             repository {
               name
+              isPrivate
               owner {
                 login
               }
@@ -183,7 +191,8 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process commits
     collection.commitContributionsByRepository.forEach((repo: any) => {
-        const repoName = `${repo.repository.owner.login}/${repo.repository.name}`
+        const isPrivate = repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.occurredAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
@@ -191,9 +200,9 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
             for (let i = 0; i < contribution.commitCount; i++) {
                 detailsMap.get(date)!.push({
                     type: 'commit',
-                    title: 'Commit',
+                    title: isPrivate ? 'Private contribution' : 'Commit',
                     repo: repoName,
-                    url: contribution.commitMessages,
+                    url: isPrivate ? '' : contribution.commitMessages,
                     source: 'github'
                 })
             }
@@ -202,16 +211,17 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process PRs
     collection.pullRequestContributionsByRepository.forEach((repo: any) => {
-        const repoName = `${repo.repository.owner.login}/${repo.repository.name}`
+        const isPrivate = repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.pullRequest.createdAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
 
             detailsMap.get(date)!.push({
                 type: 'pr',
-                title: contribution.pullRequest.title,
+                title: isPrivate ? 'Private contribution' : contribution.pullRequest.title,
                 repo: repoName,
-                url: contribution.pullRequest.url,
+                url: isPrivate ? '' : contribution.pullRequest.url,
                 source: 'github'
             })
         })
@@ -219,16 +229,17 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process Issues
     collection.issueContributionsByRepository.forEach((repo: any) => {
-        const repoName = `${repo.repository.owner.login}/${repo.repository.name}`
+        const isPrivate = repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.issue.createdAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
 
             detailsMap.get(date)!.push({
                 type: 'issue',
-                title: contribution.issue.title,
+                title: isPrivate ? 'Private contribution' : contribution.issue.title,
                 repo: repoName,
-                url: contribution.issue.url,
+                url: isPrivate ? '' : contribution.issue.url,
                 source: 'github'
             })
         })
@@ -236,22 +247,53 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process Reviews
     collection.pullRequestReviewContributionsByRepository.forEach((repo: any) => {
-        const repoName = `${repo.repository.owner.login}/${repo.repository.name}`
+        const isPrivate = repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.occurredAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
 
             detailsMap.get(date)!.push({
                 type: 'review',
-                title: `Review: ${contribution.pullRequest.title}`,
+                title: isPrivate ? 'Private contribution' : `Review: ${contribution.pullRequest.title}`,
                 repo: repoName,
-                url: contribution.pullRequest.url,
+                url: isPrivate ? '' : contribution.pullRequest.url,
                 source: 'github'
             })
         })
     })
 
     return detailsMap
+}
+
+// GitLab's events API doesn't say whether a project is private inline, so
+// we look each project up once and cache the result. If the lookup fails
+// (e.g. no access), we fail safe and treat it as private.
+const gitlabProjectPrivacyCache = new Map<number, boolean>()
+
+const isGitlabProjectPrivate = async (projectId: number): Promise<boolean> => {
+    if (gitlabProjectPrivacyCache.has(projectId)) {
+        return gitlabProjectPrivacyCache.get(projectId)!
+    }
+
+    try {
+        const response = await fetch(`https://gitlab.com/api/v4/projects/${projectId}`, {
+            headers: { 'PRIVATE-TOKEN': gitlabToken.value }
+        })
+
+        if (!response.ok) {
+            gitlabProjectPrivacyCache.set(projectId, true)
+            return true
+        }
+
+        const project = await response.json()
+        const isPrivate = project.visibility !== 'public'
+        gitlabProjectPrivacyCache.set(projectId, isPrivate)
+        return isPrivate
+    } catch {
+        gitlabProjectPrivacyCache.set(projectId, true)
+        return true
+    }
 }
 
 const fetchGitLabCommits = async (startDate: Date, endDate: Date): Promise<Map<string, ContributionDetail[]>> => {
@@ -281,43 +323,49 @@ const fetchGitLabCommits = async (startDate: Date, endDate: Date): Promise<Map<s
             break
         }
 
-        events.forEach((event: any) => {
+        for (const event of events) {
             const date = event.created_at.split('T')[0]
             const eventDate = new Date(date)
 
             if (eventDate >= startDate && eventDate <= endDate) {
                 if (!detailsMap.has(date)) detailsMap.set(date, [])
 
+                const isPrivate = event.project_id ? await isGitlabProjectPrivate(event.project_id) : true
+                const repoName = isPrivate
+                    ? 'Private project'
+                    : (event.project_id ? `Project ${event.project_id}` : 'Unknown')
+                const projectUrl = isPrivate ? '' : `https://gitlab.com/${event.project_id}`
+
                 if (event.action_name === 'pushed to' || event.action_name === 'pushed new') {
                     const commitCount = event.push_data?.commit_count || 1
                     for (let i = 0; i < commitCount; i++) {
                         detailsMap.get(date)!.push({
                             type: 'commit',
-                            title: event.push_data?.commit_title || 'Commit',
-                            repo: event.project_id ? `Project ${event.project_id}` : 'Unknown',
-                            url: `https://gitlab.com/${event.project_id}`,
+                            title: isPrivate ? 'Private contribution' : (event.push_data?.commit_title || 'Commit'),
+                            repo: repoName,
+                            url: projectUrl,
                             source: 'gitlab'
                         })
                     }
                 } else if (event.action_name === 'opened' && event.target_type === 'MergeRequest') {
                     detailsMap.get(date)!.push({
                         type: 'merge_request',
-                        title: event.target_title || 'Merge Request',
-                        repo: event.project_id ? `Project ${event.project_id}` : 'Unknown',
-                        url: event.target_url || `https://gitlab.com/${event.project_id}`,
+                        title: isPrivate ? 'Private contribution' : (event.target_title || 'Merge Request'),
+                        repo: repoName,
+                        url: isPrivate ? '' : (event.target_url || projectUrl),
                         source: 'gitlab'
                     })
                 } else if (event.action_name === 'opened' && event.target_type === 'Issue') {
                     detailsMap.get(date)!.push({
                         type: 'issue',
-                        title: event.target_title || 'Issue',
-                        repo: event.project_id ? `Project ${event.project_id}` : 'Unknown',
-                        url: event.target_url || `https://gitlab.com/${event.project_id}`,
+                        title: isPrivate ? 'Private contribution' : (event.target_title || 'Issue'),
+                        repo: repoName,
+                        url: isPrivate ? '' : (event.target_url || projectUrl),
                         source: 'gitlab'
                     })
                 }
             }
-        })
+        }
 
         page++
         if (page > 10) hasMore = false // Safety limit
@@ -418,6 +466,14 @@ const fetchContributions = async () => {
     }
 }
 
+onMounted(() => {
+    fetchContributions()
+})
+
+watch(selectedYear, () => {
+    fetchContributions()
+})
+
 const handleDayClick = (day: ContributionDay) => {
     if (day.count > 0) {
         selectedDay.value = day
@@ -462,6 +518,7 @@ const totalContributions = computed(() => {
         <div class="controls">
             <h2>Git Contribution Graph</h2>
 
+            <!--
             <div class="source-toggle">
                 <label class="checkbox-label">
                     <input type="checkbox" v-model="githubEnabled" />
@@ -486,27 +543,34 @@ const totalContributions = computed(() => {
             <div class="input-group" v-if="gitlabEnabled">
                 <label>GitLab Username:</label>
                 <input v-model="gitlabUsername" type="text" placeholder="your-username" />
-            </div>
+            </div> -->
 
             <div class="input-group">
                 <label>Time Period:</label>
-                <select v-model="selectedYear">
-                    <option v-for="year in availableYears" :key="year.value" :value="year.value">
-                        {{ year.label }}
-                    </option>
-                </select>
+                <div class="year-nav">
+                    <button type="button" class="arrow-btn" :disabled="!canGoOlder" @click="goOlder"
+                        aria-label="Previous year">
+                        ‹
+                    </button>
+                    <select v-model="selectedYear">
+                        <option v-for="year in availableYears" :key="year.value" :value="year.value">
+                            {{ year.label }}
+                        </option>
+                    </select>
+                    <button type="button" class="arrow-btn" :disabled="!canGoNewer" @click="goNewer"
+                        aria-label="Next year">
+                        ›
+                    </button>
+                </div>
             </div>
 
-            <button @click="fetchContributions" :disabled="loading || !canFetch">
-                {{ loading ? 'Loading...' : 'Fetch Contributions' }}
-            </button>
-
+            <div v-if="loading" class="loading-indicator">Loading contributions…</div>
             <div v-if="error" class="error">{{ error }}</div>
         </div>
 
         <div v-if="contributions.length > 0" class="graph-container">
             <div class="stats">
-                <strong>{{ totalContributions }}</strong> contributions in the last year
+                <strong>{{ totalContributions }}</strong> contributions
             </div>
 
             <div class="graph">
@@ -627,6 +691,8 @@ h2 {
 }
 
 .input-group {
+    display: flex;
+    justify-content: center;
     margin-bottom: 15px;
 }
 
