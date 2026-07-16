@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import GitContribGraph from './components/git-contrib-graph.vue';
+import GitContribGraph from './components/Contributions/git-contrib-graph.vue';
 // import HelloWorld from './components/HelloWorld.vue'
 </script>
 

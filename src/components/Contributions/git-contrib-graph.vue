@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import {
     ref, computed,
-    // onMounted
+    watch,
+    onMounted
 } from 'vue'
+
+import './git-contrib-graph.css'
 
 interface ContributionDay {
     date: string
     count: number
     level: number
     details: ContributionDetail[]
+    inRange: boolean
 }
 
 interface ContributionDetail {
@@ -19,15 +23,6 @@ interface ContributionDetail {
     source: 'github' | 'gitlab'
 }
 
-// interface GitHubContribution {
-//     date: string
-//     contributionCount: number
-// }
-
-// interface GitLabCommit {
-//     committed_date: string
-// }
-
 const githubToken = ref(import.meta.env.VITE_GITHUB_TOKEN ?? '')
 const gitlabToken = ref(import.meta.env.VITE_GITLAB_TOKEN ?? '')
 const gitlabUsername = ref(import.meta.env.VITE_GITLAB_USERNAME ?? "Wabtey")
@@ -35,7 +30,14 @@ const gitlabUsername = ref(import.meta.env.VITE_GITLAB_USERNAME ?? "Wabtey")
 const githubEnabled = ref(true)
 const gitlabEnabled = ref(true)
 
-const selectedYear = ref<string>('last-year')
+const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+const selectedYear = ref<string>('2023') // ref<string>('last-year')
 const contributions = ref<ContributionDay[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -54,6 +56,27 @@ const availableYears = computed(() => {
 })
 
 /* ------------------------------ Month labels ------------------------------ */
+const currentYearIndex = computed(() =>
+    availableYears.value.findIndex(y => y.value === selectedYear.value)
+)
+
+const canGoOlder = computed(() =>
+    currentYearIndex.value !== -1 && currentYearIndex.value < availableYears.value.length - 1
+)
+
+const canGoNewer = computed(() =>
+    currentYearIndex.value > 0
+)
+
+const goOlder = () => {
+    if (!canGoOlder.value) return
+    selectedYear.value = availableYears.value[currentYearIndex.value + 1]!.value
+}
+
+const goNewer = () => {
+    if (!canGoNewer.value) return
+    selectedYear.value = availableYears.value[currentYearIndex.value - 1]!.value
+}
 
 const weeks = computed(() => {
     const grouped: ContributionDay[][] = []
@@ -74,6 +97,37 @@ const weeks = computed(() => {
     return grouped
 })
 
+const monthLabels = computed(() => {
+    const labels = new Map<number, string>()
+
+    weeks.value.forEach((week, weekIndex) => {
+        for (const day of week) {
+            if (!day.inRange) continue
+            const date = new Date(day.date + 'T00:00:00')
+            if (date.getDate() === 1) {
+                labels.set(weekIndex, date.toLocaleString('default', { month: 'short' }))
+                break
+            }
+        }
+    })
+
+    return labels
+})
+
+const getMonthLabel = (weekIndex: number): string => {
+    return monthLabels.value.get(weekIndex) ?? ''
+}
+
+const weekdayLabels = [
+    { row: 0, text: 'Mon' },
+    { row: 1, text: '' },
+    { row: 2, text: 'Wed' },
+    { row: 3, text: '' },
+    { row: 4, text: 'Fri' },
+    { row: 5, text: '' },
+    { row: 6, text: '' }
+]
+
 const getLevelColor = (level: number): string => {
     const colors = [
         '#161b22',
@@ -81,22 +135,16 @@ const getLevelColor = (level: number): string => {
         '#006d32',
         '#26a641',
         '#39d353'
-        // '#ebedf0',
-        // '#9be9a8',
-        // '#40c463',
-        // '#30a14e',
-        // '#216e39'
     ]
-    return colors[Math.min(level, 4)] ?? '#161b22' // '#ebedf0'
+    return colors[Math.min(level, 4)] ?? '#161b22'
 }
 
-/* ---------------------------------- Query --------------------------------- */
-
-const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetail[]>> => {
+/* --------------------------------- Queries -------------------------------- */
+const fetchGitHubContributions = async (fromDate: Date, toDate: Date): Promise<Map<string, ContributionDetail[]>> => {
     const query = `
-    query {
+    query($from: DateTime!, $to: DateTime!) {
       viewer {
-        contributionsCollection {
+        contributionsCollection(from: $from, to: $to) {
           commitContributionsByRepository {
             repository {
               name
@@ -178,7 +226,15 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
             'Authorization': `bearer ${githubToken.value}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({
+            query,
+            variables: {
+                // GitHub caps this range at 1 year; our per-year and
+                // rolling windows both stay within that.
+                from: fromDate.toISOString(),
+                to: toDate.toISOString()
+            }
+        })
     })
 
     if (!response.ok) {
@@ -186,13 +242,22 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
     }
 
     const data = await response.json()
+
+    if (data.errors?.length) {
+        // GitHub returns HTTP 200 even when some fields fail (e.g. insufficient
+        // token scope to resolve isPrivate/owner for a given repo). Log instead
+        // of failing outright, since data.data may still be partially usable.
+        console.warn('GitHub GraphQL returned partial errors:', data.errors)
+    }
+
     const detailsMap = new Map<string, ContributionDetail[]>()
     const collection = data.data.viewer.contributionsCollection
 
     // Process commits
     collection.commitContributionsByRepository.forEach((repo: any) => {
-        const isPrivate = repo.repository.isPrivate
-        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
+        if (!repo?.repository) return // couldn't resolve this repo — skip rather than crash
+        const isPrivate = !!repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner?.login ?? '?'}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.occurredAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
@@ -211,8 +276,9 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process PRs
     collection.pullRequestContributionsByRepository.forEach((repo: any) => {
-        const isPrivate = repo.repository.isPrivate
-        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
+        if (!repo?.repository) return
+        const isPrivate = !!repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner?.login ?? '?'}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.pullRequest.createdAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
@@ -229,8 +295,9 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process Issues
     collection.issueContributionsByRepository.forEach((repo: any) => {
-        const isPrivate = repo.repository.isPrivate
-        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
+        if (!repo?.repository) return
+        const isPrivate = !!repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner?.login ?? '?'}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.issue.createdAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
@@ -247,8 +314,9 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
 
     // Process Reviews
     collection.pullRequestReviewContributionsByRepository.forEach((repo: any) => {
-        const isPrivate = repo.repository.isPrivate
-        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner.login}/${repo.repository.name}`
+        if (!repo?.repository) return
+        const isPrivate = !!repo.repository.isPrivate
+        const repoName = isPrivate ? 'Private repository' : `${repo.repository.owner?.login ?? '?'}/${repo.repository.name}`
         repo.contributions.nodes.forEach((contribution: any) => {
             const date = contribution.occurredAt.split('T')[0]
             if (!detailsMap.has(date)) detailsMap.set(date, [])
@@ -266,10 +334,48 @@ const fetchGitHubContributions = async (): Promise<Map<string, ContributionDetai
     return detailsMap
 }
 
-// GitLab's events API doesn't say whether a project is private inline, so
-// we look each project up once and cache the result. If the lookup fails
-// (e.g. no access), we fail safe and treat it as private.
+// GitLab's events API doesn't say whether a project is private inline.
+// Rather than making one *authenticated* call per project (which was
+// throwing 403s for projects the token's scope can't fully resolve, even
+// when the project is genuinely public), we:
+//   1. Fetch the list of projects the user is actually a member of ONCE —
+//      this covers almost every event and needs no per-project call.
+//   2. For anything not in that list (e.g. a one-off public contribution
+//      to a repo the user never joined), fall back to a single
+//      *unauthenticated* lookup — public project info doesn't require a
+//      token, so this can't fail due to scope, only for truly
+//      private/internal projects, which is exactly what we want.
 const gitlabProjectPrivacyCache = new Map<number, boolean>()
+let gitlabMembershipLoaded = false
+
+const loadGitlabMembershipProjects = async (): Promise<void> => {
+    if (gitlabMembershipLoaded) return
+    gitlabMembershipLoaded = true
+
+    let page = 1
+    while (page <= 10) { // safety cap
+        try {
+            const response = await fetch(
+                `https://gitlab.com/api/v4/projects?membership=true&simple=true&per_page=100&page=${page}`,
+                { headers: { 'PRIVATE-TOKEN': gitlabToken.value } }
+            )
+
+            if (!response.ok) break
+
+            const projects = await response.json()
+            if (!Array.isArray(projects) || projects.length === 0) break
+
+            for (const project of projects) {
+                gitlabProjectPrivacyCache.set(project.id, project.visibility !== 'public')
+            }
+
+            if (projects.length < 100) break
+            page++
+        } catch {
+            break
+        }
+    }
+}
 
 const isGitlabProjectPrivate = async (projectId: number): Promise<boolean> => {
     if (gitlabProjectPrivacyCache.has(projectId)) {
@@ -277,9 +383,9 @@ const isGitlabProjectPrivate = async (projectId: number): Promise<boolean> => {
     }
 
     try {
-        const response = await fetch(`https://gitlab.com/api/v4/projects/${projectId}`, {
-            headers: { 'PRIVATE-TOKEN': gitlabToken.value }
-        })
+        // Unauthenticated on purpose: a public project resolves fine without
+        // a token, and anything that isn't public correctly 401/403/404s here.
+        const response = await fetch(`https://gitlab.com/api/v4/projects/${projectId}`)
 
         if (!response.ok) {
             gitlabProjectPrivacyCache.set(projectId, true)
@@ -296,8 +402,10 @@ const isGitlabProjectPrivate = async (projectId: number): Promise<boolean> => {
     }
 }
 
-const fetchGitLabCommits = async (startDate: Date, endDate: Date): Promise<Map<string, ContributionDetail[]>> => {
+const fetchGitLabCommits = async (startStr: string, endStr: string): Promise<Map<string, ContributionDetail[]>> => {
     const detailsMap = new Map<string, ContributionDetail[]>()
+
+    await loadGitlabMembershipProjects()
 
     let page = 1
     let hasMore = true
@@ -325,9 +433,8 @@ const fetchGitLabCommits = async (startDate: Date, endDate: Date): Promise<Map<s
 
         for (const event of events) {
             const date = event.created_at.split('T')[0]
-            const eventDate = new Date(date)
 
-            if (eventDate >= startDate && eventDate <= endDate) {
+            if (date >= startStr && date <= endStr) {
                 if (!detailsMap.has(date)) detailsMap.set(date, [])
 
                 const isPrivate = event.project_id ? await isGitlabProjectPrivate(event.project_id) : true
@@ -391,13 +498,20 @@ const generateDateRange = (): { dates: string[], startDate: Date, endDate: Date 
         endDate = new Date(year, 11, 31)
     }
 
-    // Start from the Sunday before the start date
+    // Start from the Monday on/before the start date
+    // getDay(): Sun=0..Sat=6, so days-since-Monday is (day + 6) % 7
     const adjustedStart = new Date(startDate)
-    adjustedStart.setDate(adjustedStart.getDate() - adjustedStart.getDay())
+    adjustedStart.setDate(adjustedStart.getDate() - ((adjustedStart.getDay() + 6) % 7))
 
     const currentDate = new Date(adjustedStart)
     while (currentDate <= endDate) {
-        dates.push(currentDate.toISOString().split('T')[0] ?? "damn")
+        dates.push(formatLocalDate(currentDate))
+        currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    /* -------------- Pad out week days and months for a rectangle -------------- */
+    while (currentDate.getDay() !== 1) {
+        dates.push(formatLocalDate(currentDate))
         currentDate.setDate(currentDate.getDate() + 1)
     }
 
@@ -429,20 +543,17 @@ const fetchContributions = async () => {
 
     try {
         const { dates, startDate, endDate } = generateDateRange()
-
+        const startStr = formatLocalDate(startDate)
+        const endStr = formatLocalDate(endDate)
 
         const [githubData, gitlabData] = await Promise.all([
             githubEnabled.value && githubToken.value
-                ? fetchGitHubContributions()
+                ? fetchGitHubContributions(startDate, endDate)
                 : Promise.resolve(new Map<string, ContributionDetail[]>()),
             gitlabEnabled.value && gitlabToken.value && gitlabUsername.value
-                ? fetchGitLabCommits(startDate, endDate)
+                ? fetchGitLabCommits(startStr, endStr)
                 : Promise.resolve(new Map<string, ContributionDetail[]>())
         ])
-        // const [githubData, gitlabData] = await Promise.all([
-        //     fetchGitHubContributions(),
-        //     gitlabToken.value && gitlabUsername.value ? fetchGitLabCommits(startDate, endDate) : Promise.resolve(new Map())
-        // ])
 
         const combinedContributions: ContributionDay[] = dates.map(date => {
             const githubDetails = githubData.get(date) || []
@@ -454,7 +565,8 @@ const fetchContributions = async () => {
                 date,
                 count: totalCount,
                 level: calculateLevel(totalCount),
-                details: allDetails
+                details: allDetails,
+                inRange: date >= startStr && date <= endStr
             }
         })
 
@@ -466,6 +578,7 @@ const fetchContributions = async () => {
     }
 }
 
+// NEW: auto-fetch on load and whenever the selected time period changes
 onMounted(() => {
     fetchContributions()
 })
@@ -518,33 +631,6 @@ const totalContributions = computed(() => {
         <div class="controls">
             <h2>Git Contribution Graph</h2>
 
-            <!--
-            <div class="source-toggle">
-                <label class="checkbox-label">
-                    <input type="checkbox" v-model="githubEnabled" />
-                    Enable GitHub
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" v-model="gitlabEnabled" />
-                    Enable GitLab
-                </label>
-            </div>
-
-            <div class="input-group" v-if="githubEnabled">
-                <label>GitHub Personal Access Token:</label>
-                <input v-model="githubToken" type="password" placeholder="ghp_xxxxxxxxxxxx" />
-            </div>
-
-            <div class="input-group" v-if="gitlabEnabled">
-                <label>GitLab Personal Access Token:</label>
-                <input v-model="gitlabToken" type="password" placeholder="glpat-xxxxxxxxxxxx" />
-            </div>
-
-            <div class="input-group" v-if="gitlabEnabled">
-                <label>GitLab Username:</label>
-                <input v-model="gitlabUsername" type="text" placeholder="your-username" />
-            </div> -->
-
             <div class="input-group">
                 <label>Time Period:</label>
                 <div class="year-nav">
@@ -574,25 +660,26 @@ const totalContributions = computed(() => {
             </div>
 
             <div class="graph">
-                <div class="months">
-                    <span>Jan</span>
-                    <span>Feb</span>
-                    <span>Mar</span>
-                    <span>Apr</span>
-                    <span>May</span>
-                    <span>Jun</span>
-                    <span>Jul</span>
-                    <span>Aug</span>
-                    <span>Sep</span>
-                    <span>Oct</span>
-                    <span>Nov</span>
-                    <span>Dec</span>
-                </div>
-                <div class="grid">
-                    <div class="week" v-for="(week, index) in weeks" :key="index">
-                        <div v-for="day in week" :key="day.date" class="day"
-                            :style="{ backgroundColor: getLevelColor(day.level) }"
-                            :title="`${day.count} contributions on ${day.date}`" @click="handleDayClick(day)" />
+                <div class="graph-inner">
+                    <div class="weekday-col">
+                        <span v-for="label in weekdayLabels" :key="label.row" class="weekday-cell">{{ label.text
+                            }}</span>
+                    </div>
+                    <div class="graph-scroll">
+                        <div class="months">
+                            <span v-for="(week, index) in weeks" :key="index" class="month-cell">
+                                {{ getMonthLabel(index) }}
+                            </span>
+                        </div>
+                        <div class="grid">
+                            <div class="week" v-for="(week, index) in weeks" :key="index">
+                                <div v-for="day in week" :key="day.date" class="day"
+                                    :class="{ 'day-out-of-range': !day.inRange }"
+                                    :style="{ backgroundColor: day.inRange ? getLevelColor(day.level) : 'transparent' }"
+                                    :title="day.inRange ? `${day.count} contributions on ${day.date}` : undefined"
+                                    @click="handleDayClick(day)" />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -641,360 +728,3 @@ const totalContributions = computed(() => {
         </div>
     </div>
 </template>
-
-<style scoped>
-.contribution-graph {
-    --bg: #0d1117;
-    --bg-elevated: #161b22;
-    --border: #30363d;
-    --text: #c9d1d9;
-    --text-muted: #8b949e;
-    --accent: #2f81f7;
-
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 20px;
-    background-color: var(--bg);
-    color: var(--text);
-}
-
-.controls {
-    margin-bottom: 30px;
-}
-
-h2 {
-    margin-bottom: 20px;
-    color: var(--text);
-}
-
-.source-toggle {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 15px;
-}
-
-.checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 500;
-    color: var(--text);
-    cursor: pointer;
-}
-
-.checkbox-label input[type="checkbox"] {
-    width: 15px;
-    height: 15px;
-    cursor: pointer;
-    accent-color: var(--accent);
-}
-
-.input-group {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 15px;
-}
-
-.input-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    color: var(--text);
-}
-
-.input-group input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 14px;
-    background-color: var(--bg-elevated);
-    color: var(--text);
-}
-
-.input-group input::placeholder {
-    color: var(--text-muted);
-}
-
-.input-group select {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 14px;
-    background-color: var(--bg-elevated);
-    color: var(--text);
-    cursor: pointer;
-}
-
-.input-group select option {
-    background-color: var(--bg-elevated);
-    color: var(--text);
-}
-
-button {
-    background-color: #2da44e;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    font-weight: 500;
-}
-
-button:hover:not(:disabled) {
-    background-color: #2c974b;
-}
-
-button:disabled {
-    background-color: #235c33;
-    color: var(--text-muted);
-    cursor: not-allowed;
-}
-
-.error {
-    margin-top: 10px;
-    padding: 10px;
-    background-color: #3b1a1c;
-    border: 1px solid #f85149;
-    border-radius: 6px;
-    color: #ffa198;
-}
-
-.graph-container {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 20px;
-}
-
-.stats {
-    margin-bottom: 15px;
-    font-size: 14px;
-    color: var(--text-muted);
-}
-
-.graph {
-    overflow-x: auto;
-}
-
-.months {
-    display: flex;
-    gap: 14px;
-    margin-bottom: 5px;
-    font-size: 12px;
-    color: var(--text-muted);
-    padding-left: 20px;
-}
-
-.months span {
-    flex: 0 0 52px;
-}
-
-.grid {
-    display: flex;
-    gap: 3px;
-}
-
-.week {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.day {
-    width: 11px;
-    height: 11px;
-    border-radius: 2px;
-    cursor: pointer;
-}
-
-.day:hover {
-    outline: 2px solid rgba(240, 246, 252, 0.2);
-}
-
-.legend {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-top: 15px;
-    font-size: 12px;
-    color: var(--text-muted);
-    justify-content: flex-end;
-}
-
-.level {
-    width: 11px;
-    height: 11px;
-    border-radius: 2px;
-}
-
-/* Modal styles */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 20px;
-}
-
-.modal-content {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    max-width: 600px;
-    width: 100%;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px;
-    border-bottom: 1px solid var(--border);
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-size: 18px;
-    color: var(--text);
-}
-
-.close-btn {
-    background: none;
-    border: none;
-    font-size: 28px;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-}
-
-.close-btn:hover {
-    background: var(--border);
-}
-
-.modal-body {
-    padding: 20px;
-    overflow-y: auto;
-}
-
-.total-count {
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: 20px;
-}
-
-.contributions-list {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.contribution-item {
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: #0d1117;
-}
-
-.contribution-header {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
-}
-
-.type-badge,
-.source-badge {
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.type-badge {
-    background: #163650;
-    color: #58a6ff;
-}
-
-.badge-commit {
-    background: #163650;
-    color: #58a6ff;
-}
-
-.badge-pr,
-.badge-merge_request {
-    background: #123822;
-    color: #3fb950;
-}
-
-.badge-issue {
-    background: #3d2e00;
-    color: #d29922;
-}
-
-.badge-review {
-    background: #4a2600;
-    color: #db6d28;
-}
-
-.source-badge {
-    background: var(--border);
-    color: var(--text-muted);
-    text-transform: uppercase;
-}
-
-.source-github {
-    background: #f0f6fc;
-    color: #0d1117;
-}
-
-.source-gitlab {
-    background: #fc6d26;
-    color: white;
-}
-
-.contribution-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 4px;
-}
-
-.contribution-repo {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-}
-
-.contribution-link {
-    font-size: 12px;
-    color: var(--accent);
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.contribution-link:hover {
-    text-decoration: underline;
-}
-</style>

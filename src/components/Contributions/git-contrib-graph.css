@@ -1,0 +1,370 @@
+.contribution-graph {
+    --bg: #0d1117;
+    --bg-elevated: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #2f81f7;
+
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: var(--bg);
+    color: var(--text);
+}
+
+.controls {
+    margin-bottom: 30px;
+}
+
+h2 {
+    margin-bottom: 20px;
+    color: var(--text);
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 15px;
+    max-width: 260px;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.year-nav {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.year-nav select {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    background-color: var(--bg-elevated);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.year-nav select option {
+    background-color: var(--bg-elevated);
+    color: var(--text);
+}
+
+.arrow-btn {
+    width: 34px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background-color: var(--bg-elevated);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.arrow-btn:hover:not(:disabled) {
+    background-color: var(--border);
+}
+
+.arrow-btn:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.loading-indicator {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.error {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #3b1a1c;
+    border: 1px solid #f85149;
+    border-radius: 6px;
+    color: #ffa198;
+}
+
+.graph-container {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+}
+
+.stats {
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.graph {
+    overflow-x: auto;
+}
+
+.graph-inner {
+    display: flex;
+    gap: 6px;
+}
+
+.weekday-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    /* offset by the month-label row height + its margin so row 0
+       lines up with the first grid row, not the month labels */
+    margin-top: 19px;
+    flex-shrink: 0;
+}
+
+.weekday-cell {
+    height: 11px;
+    line-height: 11px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.graph-scroll {
+    overflow-x: auto;
+}
+
+.months {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 5px;
+}
+
+.month-cell {
+    flex: 0 0 11px;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: visible;
+}
+
+.grid {
+    display: flex;
+    gap: 3px;
+}
+
+.week {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.day {
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(240, 246, 252, 0.06);
+}
+
+.day:hover {
+    outline: 2px solid rgba(240, 246, 252, 0.2);
+}
+
+.day-out-of-range {
+    box-shadow: none;
+    cursor: default;
+}
+
+.day-out-of-range:hover {
+    outline: none;
+}
+
+.legend {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 15px;
+    font-size: 12px;
+    color: var(--text-muted);
+    justify-content: flex-end;
+}
+
+.level {
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+}
+
+/* Modal styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-content {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-width: 600px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text);
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.close-btn:hover {
+    background: var(--border);
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.total-count {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+}
+
+.contributions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.contribution-item {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #0d1117;
+}
+
+.contribution-header {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.type-badge,
+.source-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.type-badge {
+    background: #163650;
+    color: #58a6ff;
+}
+
+.badge-commit {
+    background: #163650;
+    color: #58a6ff;
+}
+
+.badge-pr,
+.badge-merge_request {
+    background: #123822;
+    color: #3fb950;
+}
+
+.badge-issue {
+    background: #3d2e00;
+    color: #d29922;
+}
+
+.badge-review {
+    background: #4a2600;
+    color: #db6d28;
+}
+
+.source-badge {
+    background: var(--border);
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.source-github {
+    background: #f0f6fc;
+    color: #0d1117;
+}
+
+.source-gitlab {
+    background: #fc6d26;
+    color: white;
+}
+
+.contribution-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.contribution-repo {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.contribution-link {
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.contribution-link:hover {
+    text-decoration: underline;
+}
