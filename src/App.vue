@@ -6,10 +6,13 @@ import GitContribGraph from './components/Contributions/git-contrib-graph.vue';
 <template>
     <div>
         <a href="https://vite.dev" target="_blank">
-            <img src="/vite.svg" class="logo" alt="Vite logo" />
-        </a>
-        <a href="https://vuejs.org/" target="_blank">
-            <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
+            <a href="https://gitlab.com/Wabtey">
+                <img src="./assets/avatar.png" class="avatar elevator" alt="Me In the elevator" />
+            </a>
+
+            <a href="github.com/Wabtey/">
+                <img src="./assets/Monkey_III.png" class="avatar monkey" alt="Me In the elevator" />
+            </a>
         </a>
     </div>
     <!-- <HelloWorld msg="Vite + Vue" /> -->
@@ -17,18 +20,19 @@ import GitContribGraph from './components/Contributions/git-contrib-graph.vue';
 </template>
 
 <style scoped>
-.logo {
+.avatar {
     height: 6em;
     padding: 1.5em;
     will-change: filter;
     transition: filter 300ms;
+    border-radius: 50%;
 }
 
-.logo:hover {
-    filter: drop-shadow(0 0 2em #646cffaa);
+.avatar.elevator:hover {
+    filter: drop-shadow(0 0 2em #ffc092aa);
 }
 
-.logo.vue:hover {
-    filter: drop-shadow(0 0 2em #42b883aa);
+.avatar.monkey:hover {
+    filter: drop-shadow(0 0 2em #e3c29a);
 }
 </style>
