@@ -125,7 +125,7 @@ const weekdayLabels = [
     { row: 3, text: '' },
     { row: 4, text: 'Fri' },
     { row: 5, text: '' },
-    { row: 6, text: '' }
+    { row: 6, text: 'Sun' }
 ]
 
 const getLevelColor = (level: number): string => {
@@ -333,6 +333,8 @@ const fetchGitHubContributions = async (fromDate: Date, toDate: Date): Promise<M
 
     return detailsMap
 }
+
+// WARNING: there is still some 404 (not auth) error coming through)
 
 // GitLab's events API doesn't say whether a project is private inline.
 // Rather than making one *authenticated* call per project (which was

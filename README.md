@@ -1,10 +1,24 @@
-# Vue 3 + TypeScript + Vite
+# Welcome to my Portfolio code source
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+For now there is only my complete contribution graph (all years) from gitlab and github (except some of my projects lost in corporate clouds).
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+![contribution graph preview](docs/git-contributions.png)
 
-## Contributions Graph Tokens
+I intend to present and publish a demo for each of my cool projects (including some of my computer science study classes).
+
+You can run a test run of a music maker code language called Strudel.
+
+![strudel preview](docs/strudel-iframe.png)
+
+## Run this website
+
+To publish it, we need github pages cause they are cheap (free).
+
+### Quick start
+
+You need two tokens for the Contributions Graph (with their needed permission).
 
 - GitHub: repo, user
 - GitLab: read_user, read_repository
+
+Then run `npm run dev`

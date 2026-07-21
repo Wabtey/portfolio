@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import GitContribGraph from './components/Contributions/git-contrib-graph.vue';
+import Strudel from './components/showcase/strudel.vue';
 // import HelloWorld from './components/HelloWorld.vue'
 </script>
 
 <template>
     <div>
-        <a href="https://vite.dev" target="_blank">
-            <a href="https://gitlab.com/Wabtey">
-                <img src="./assets/avatar.png" class="avatar elevator" alt="Me In the elevator" />
-            </a>
+        <a href="https://gitlab.com/Wabtey">
+            <img src="./assets/avatar.png" class="avatar elevator" alt="Me In the elevator" />
+        </a>
 
-            <a href="github.com/Wabtey/">
-                <img src="./assets/Monkey_III.png" class="avatar monkey" alt="Me In the elevator" />
-            </a>
+        <a href="github.com/Wabtey/">
+            <img src="./assets/Monkey_III.png" class="avatar monkey" alt="Me In the elevator" />
         </a>
     </div>
     <!-- <HelloWorld msg="Vite + Vue" /> -->
     <GitContribGraph />
+
+    <br />
+
+    <Strudel />
 </template>
 
 <style scoped>
